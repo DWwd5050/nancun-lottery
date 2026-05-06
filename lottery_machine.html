@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>大乐透摇号机</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:#0a0a12;min-height:100vh;color:#fff;font-size:15px;line-height:1.6;
+  -webkit-tap-highlight-color:transparent;
+}
+.page{max-width:460px;margin:0 auto;padding:24px 16px 64px}
+
+/* header */
+.hd{text-align:center;margin-bottom:24px}
+.hd h1{font-size:22px;font-weight:600;background:linear-gradient(135deg,#f6d365,#fda085);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hd p{font-size:12px;color:#666;margin-top:4px}
+
+/* machine */
+.machine{
+  background:linear-gradient(145deg,#13132a,#1a1a35);
+  border-radius:20px;padding:28px 20px;margin-bottom:20px;
+  box-shadow:0 8px 32px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);
+  position:relative;overflow:hidden;
+}
+.machine::before{
+  content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;
+  background:radial-gradient(circle at 30% 30%,rgba(253,160,133,.06),transparent 50%);
+  pointer-events:none;
+}
+
+.zone-label{font-size:12px;color:#888;margin-bottom:12px;letter-spacing:.08em;text-transform:uppercase}
+
+/* ball container */
+.balls{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;min-height:72px;align-items:center;margin-bottom:20px}
+.ball{
+  width:62px;height:62px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:24px;font-weight:700;position:relative;
+  box-shadow:0 4px 12px rgba(0,0,0,.4),inset 0 -3px 6px rgba(0,0,0,.3),inset 0 3px 6px rgba(255,255,255,.15);
+  transition:transform .15s;
+}
+.ball:active{transform:scale(.94)}
+.ball.red{background:linear-gradient(145deg,#ef4444,#b91c1c);color:#fff}
+.ball.blue{background:linear-gradient(145deg,#3b82f6,#1d4ed8);color:#fff}
+.ball.empty{
+  background:linear-gradient(145deg,#1e1e3a,#252545);color:#444;
+  font-size:18px;
+  box-shadow:0 4px 12px rgba(0,0,0,.2),inset 0 -2px 4px rgba(0,0,0,.2),inset 0 2px 4px rgba(255,255,255,.04);
+}
+
+/* shuffling animation */
+@keyframes shake{
+  0%,100%{transform:translate(0,0) rotate(0deg)}
+  10%{transform:translate(-3px,-2px) rotate(-3deg)}
+  20%{transform:translate(3px,1px) rotate(2deg)}
+  30%{transform:translate(-2px,3px) rotate(-2deg)}
+  40%{transform:translate(2px,-3px) rotate(3deg)}
+  50%{transform:translate(-3px,2px) rotate(-1deg)}
+  60%{transform:translate(3px,-1px) rotate(2deg)}
+  70%{transform:translate(-1px,3px) rotate(-3deg)}
+  80%{transform:translate(2px,-2px) rotate(1deg)}
+  90%{transform:translate(-2px,1px) rotate(-2deg)}
+}
+.shaking .ball{animation:shake .12s infinite}
+
+@keyframes popIn{
+  0%{transform:scale(0) rotate(-180deg);opacity:0}
+  60%{transform:scale(1.15) rotate(10deg);opacity:1}
+  80%{transform:scale(.95) rotate(-5deg)}
+  100%{transform:scale(1) rotate(0deg)}
+}
+.pop-in{animation:popIn .4s cubic-bezier(.34,1.56,.64,1)}
+
+/* divider */
+.divider{border:none;border-top:1px solid rgba(255,255,255,.06);margin:20px 0}
+
+/* btn */
+.btn{
+  display:block;width:100%;height:54px;border-radius:14px;border:none;
+  font-size:17px;font-weight:600;cursor:pointer;letter-spacing:.06em;
+  -webkit-tap-highlight-color:transparent;position:relative;overflow:hidden;
+}
+.btn.primary{
+  background:linear-gradient(135deg,#f6d365,#fda085);color:#1a1a18;
+  box-shadow:0 4px 16px rgba(253,160,133,.3);
+}
+.btn.primary:active{opacity:.85;transform:scale(.98)}
+.btn.ghost{
+  background:rgba(255,255,255,.06);color:#999;margin-top:10px;
+}
+.btn.ghost:active{background:rgba(255,255,255,.1)}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* result section */
+.result-section{display:none}
+.result-section.show{display:block}
+
+.result-card{
+  background:linear-gradient(145deg,#13132a,#1a1a35);
+  border-radius:16px;padding:20px;margin-bottom:14px;
+  box-shadow:0 4px 20px rgba(0,0,0,.3);
+}
+.result-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.result-row .mini-ball{
+  width:42px;height:42px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:700;
+}
+.mini-ball.red{background:linear-gradient(145deg,#ef4444,#b91c1c);color:#fff;box-shadow:0 2px 8px rgba(239,68,68,.3)}
+.mini-ball.blue{background:linear-gradient(145deg,#3b82f6,#1d4ed8);color:#fff;box-shadow:0 2px 8px rgba(59,130,246,.3)}
+.plus{color:#555;font-size:18px;font-weight:300;padding:0 2px}
+
+.result-meta{font-size:12px;color:#555;text-align:center;margin-top:10px}
+
+/* history */
+.history{margin-top:20px}
+.history-title{font-size:13px;color:#666;margin-bottom:10px;text-align:center}
+.history-item{
+  background:rgba(255,255,255,.03);border-radius:10px;padding:12px 14px;margin-bottom:8px;
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.history-item .hm{
+  width:30px;height:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+  font-size:12px;font-weight:600;
+}
+.hm.red{background:rgba(239,68,68,.2);color:#ef4444}
+.hm.blue{background:rgba(59,130,246,.2);color:#3b82f6}
+.history-time{font-size:10px;color:#444;margin-left:auto;white-space:nowrap}
+
+/* physics info */
+.info-box{
+  background:rgba(255,255,255,.03);border-radius:12px;padding:14px 16px;margin-top:16px;
+  font-size:12px;color:#555;line-height:1.8;
+}
+.info-box strong{color:#888}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="hd">
+    <h1>大乐透摇号机</h1>
+    <p>物理随机 · 模拟摇号</p>
+  </div>
+
+  <div class="machine" id="machine">
+    <div class="zone-label">前区（5选35）</div>
+    <div class="balls" id="frontBalls">
+      <div class="ball empty">?</div>
+      <div class="ball empty">?</div>
+      <div class="ball empty">?</div>
+      <div class="ball empty">?</div>
+      <div class="ball empty">?</div>
+    </div>
+    <hr class="divider">
+    <div class="zone-label">后区（2选12）</div>
+    <div class="balls" id="backBalls">
+      <div class="ball empty">?</div>
+      <div class="ball empty">?</div>
+    </div>
+  </div>
+
+  <button class="btn primary" id="btnShake">摇 号</button>
+  <button class="btn ghost" id="btnClear">清除记录</button>
+
+  <div class="result-section" id="resultSection">
+    <div class="result-card">
+      <div class="result-row" id="resultRow"></div>
+      <div class="result-meta" id="resultMeta"></div>
+    </div>
+  </div>
+
+  <div class="history" id="historyWrap" style="display:none">
+    <div class="history-title">历史记录</div>
+    <div id="historyList"></div>
+  </div>
+
+  <div class="info-box">
+    <strong>摇号原理：</strong>模拟物理摇号机，使用 crypto.getRandomValues() 生成真随机数，每次独立抽取不可预测。前区从1-35中无放回抽取5个，后区从1-12中无放回抽取2个，与实体摇号机流程一致。
+  </div>
+</div>
+
+<script>
+// ── DOM ──
+const machine      = document.getElementById("machine");
+const frontBalls   = document.getElementById("frontBalls");
+const backBalls    = document.getElementById("backBalls");
+const btnShake     = document.getElementById("btnShake");
+const btnClear     = document.getElementById("btnClear");
+const resultSection= document.getElementById("resultSection");
+const resultRow    = document.getElementById("resultRow");
+const resultMeta   = document.getElementById("resultMeta");
+const historyWrap  = document.getElementById("historyWrap");
+const historyList  = document.getElementById("historyList");
+
+let history = [];
+let isShaking = false;
+
+// ── 真随机数（crypto） ──
+function secureRandom(max) {
+  const arr = new Uint32Array(1);
+  crypto.getRandomValues(arr);
+  return arr[0] % max;
+}
+
+// ── 无放回抽样（模拟物理摇号机逐球抽出） ──
+function draw(pool, count) {
+  const arr = [...pool];
+  const result = [];
+  for (let i = 0; i < count; i++) {
+    const idx = secureRandom(arr.length);
+    result.push(arr.splice(idx, 1)[0]);
+  }
+  return result.sort((a, b) => a - b);
+}
+
+// ── 摇号动画 ──
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function shake() {
+  if (isShaking) return;
+  isShaking = true;
+  btnShake.disabled = true;
+
+  // 重置
+  frontBalls.innerHTML = Array(5).fill('<div class="ball empty">?</div>').join("");
+  backBalls.innerHTML  = Array(2).fill('<div class="ball empty">?</div>').join("");
+  resultSection.classList.remove("show");
+
+  // 抽号
+  const front = draw(Array.from({length:35},(_,i)=>i+1), 5);
+  const back  = draw(Array.from({length:12},(_,i)=>i+1), 2);
+
+  // 摇动动画
+  machine.classList.add("shaking");
+  await sleep(800);
+  machine.classList.remove("shaking");
+
+  // 逐球弹出 - 前区
+  for (let i = 0; i < 5; i++) {
+    await sleep(200);
+    const balls = frontBalls.children;
+    const el = document.createElement("div");
+    el.className = "ball red pop-in";
+    el.textContent = front[i];
+    frontBalls.replaceChild(el, balls[i]);
+  }
+
+  await sleep(300);
+
+  // 逐球弹出 - 后区
+  for (let i = 0; i < 2; i++) {
+    await sleep(250);
+    const balls = backBalls.children;
+    const el = document.createElement("div");
+    el.className = "ball blue pop-in";
+    el.textContent = back[i];
+    backBalls.replaceChild(el, balls[i]);
+  }
+
+  // 显示结果
+  showResult(front, back);
+
+  isShaking = false;
+  btnShake.disabled = false;
+}
+
+function showResult(front, back) {
+  let html = "";
+  front.forEach(n => { html += `<div class="mini-ball red">${n}</div>`; });
+  html += `<span class="plus">+</span>`;
+  back.forEach(n => { html += `<div class="mini-ball blue">${n}</div>`; });
+  resultRow.innerHTML = html;
+
+  const now = new Date();
+  const ts = `${now.getMonth()+1}/${now.getDate()} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+  resultMeta.textContent = ts;
+  resultSection.classList.add("show");
+
+  // 记录
+  history.unshift({ front, back, time: ts });
+  if (history.length > 20) history.pop();
+  renderHistory();
+}
+
+function renderHistory() {
+  if (!history.length) { historyWrap.style.display = "none"; return; }
+  historyWrap.style.display = "";
+  historyList.innerHTML = history.map(h => {
+    let s = "";
+    h.front.forEach(n => { s += `<div class="hm red">${n}</div>`; });
+    s += `<span class="plus">+</span>`;
+    h.back.forEach(n => { s += `<div class="hm blue">${n}</div>`; });
+    s += `<span class="history-time">${h.time}</span>`;
+    return `<div class="history-item">${s}</div>`;
+  }).join("");
+}
+
+btnShake.addEventListener("click", shake);
+btnClear.addEventListener("click", () => {
+  history = [];
+  renderHistory();
+  resultSection.classList.remove("show");
+  frontBalls.innerHTML = Array(5).fill('<div class="ball empty">?</div>').join("");
+  backBalls.innerHTML  = Array(2).fill('<div class="ball empty">?</div>').join("");
+});
+</script>
+</body>
+</html>
