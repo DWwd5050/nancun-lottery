@@ -1,0 +1,1351 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大乐透历史数据深度分析</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0b0b16;--card:#12122a;--card2:#1a1a3a;--border:#2a2a4a;
+  --accent:#f6d365;--accent2:#fda085;--red:#ef4444;--blue:#3b82f6;
+  --text:#e8e8f0;--text2:#888;--text3:#555;
+  --green:#22c55e;--purple:#a855f7;--cyan:#06b6d4;--orange:#f97316;
+}
+html{-webkit-text-size-adjust:100%}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:var(--bg);color:var(--text);font-size:14px;line-height:1.6;
+  -webkit-tap-highlight-color:transparent;min-height:100vh;
+}
+.app{max-width:1200px;margin:0 auto;padding:20px 16px 80px}
+
+/* header */
+.header{text-align:center;margin-bottom:32px;padding:24px 0}
+.header h1{font-size:28px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+.header p{color:var(--text2);font-size:13px}
+.header .badge{display:inline-block;background:var(--card2);border:1px solid var(--border);border-radius:20px;padding:4px 14px;font-size:12px;color:var(--accent);margin-top:10px}
+
+/* loading */
+.loading-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(11,11,22,.95);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;transition:opacity .3s}
+.loading-overlay.hide{opacity:0;pointer-events:none}
+.spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-overlay p{margin-top:16px;color:var(--text2);font-size:14px}
+.loading-overlay .progress{margin-top:8px;color:var(--accent);font-size:12px}
+
+/* nav tabs */
+.tabs{display:flex;gap:4px;margin-bottom:24px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.tabs::-webkit-scrollbar{height:2px}
+.tabs::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.tab{padding:8px 16px;border-radius:8px;font-size:13px;cursor:pointer;white-space:nowrap;border:1px solid transparent;transition:all .2s;color:var(--text2);background:var(--card)}
+.tab:hover{color:var(--text);background:var(--card2)}
+.tab.active{background:linear-gradient(135deg,rgba(246,211,101,.15),rgba(253,160,133,.15));border-color:var(--accent);color:var(--accent)}
+
+/* panels */
+.panel{display:none;animation:fadeIn .3s}
+.panel.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--border);border-radius:16px;padding:20px;margin-bottom:16px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(246,211,101,.2),transparent)}
+.card-title{font-size:16px;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.card-title .icon{width:24px;height:24px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px}
+
+/* stats grid */
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:24px}
+.stat-item{background:var(--card2);border:1px solid var(--border);border-radius:12px;padding:16px;text-align:center}
+.stat-item .value{font-size:28px;font-weight:700;background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-item .label{font-size:12px;color:var(--text2);margin-top:4px}
+
+/* heatmap */
+.heatmap-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.heatmap{display:grid;gap:2px;min-width:600px}
+.heatmap-cell{border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;aspect-ratio:1.6;transition:transform .15s;cursor:pointer;position:relative}
+.heatmap-cell:hover{transform:scale(1.15);z-index:2}
+.heatmap-cell .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#000;color:#fff;padding:4px 8px;border-radius:4px;font-size:11px;white-space:nowrap;z-index:10}
+.heatmap-cell:hover .tip{display:block}
+.heatmap-label{font-size:12px;color:var(--text2);display:flex;align-items:center;justify-content:center;font-weight:500}
+.heatmap-title{font-size:12px;color:var(--text2);text-align:center;margin-bottom:8px}
+
+/* bar chart */
+.bar-chart{display:flex;align-items:flex-end;gap:3px;height:160px;padding-top:20px;position:relative}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.bar{width:100%;border-radius:3px 3px 0 0;transition:height .3s;min-height:2px;position:relative;cursor:pointer}
+.bar:hover{opacity:.85}
+.bar-col .bar-label{font-size:9px;color:var(--text2);writing-mode:vertical-rl;text-orientation:mixed;height:36px;display:flex;align-items:center}
+.bar-col .bar-val{font-size:9px;color:var(--text2)}
+
+/* distribution chart */
+.dist-chart{display:flex;flex-direction:column;gap:8px}
+.dist-row{display:flex;align-items:center;gap:8px}
+.dist-label{width:80px;font-size:12px;color:var(--text2);text-align:right;flex-shrink:0}
+.dist-bar-wrap{flex:1;height:24px;background:var(--card2);border-radius:4px;overflow:hidden;position:relative}
+.dist-bar{height:100%;border-radius:4px;transition:width .5s;display:flex;align-items:center;padding-left:8px;font-size:11px;color:#fff;font-weight:600}
+.dist-count{width:50px;font-size:12px;color:var(--text2);text-align:left;flex-shrink:0}
+
+/* table */
+.data-table{width:100%;border-collapse:collapse;font-size:12px}
+.data-table th{background:var(--card2);color:var(--text2);padding:8px 6px;text-align:center;font-weight:500;border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+.data-table td{padding:6px;text-align:center;border-bottom:1px solid rgba(42,42,74,.3)}
+.data-table tr:hover td{background:rgba(246,211,101,.03)}
+.num-red{color:var(--red);font-weight:600}
+.num-blue{color:var(--blue);font-weight:600}
+
+/* scroll table */
+.table-scroll{max-height:400px;overflow-y:auto;border-radius:8px;border:1px solid var(--border)}
+.table-scroll::-webkit-scrollbar{width:4px}
+.table-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+
+/* year filter */
+.year-filter{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:16px}
+.year-btn{padding:4px 10px;border-radius:6px;font-size:11px;cursor:pointer;border:1px solid var(--border);background:var(--card2);color:var(--text2);transition:all .2s}
+.year-btn:hover{color:var(--text)}
+.year-btn.active{background:linear-gradient(135deg,rgba(246,211,101,.15),rgba(253,160,133,.15));border-color:var(--accent);color:var(--accent)}
+
+/* odd/even pie */
+.pie-chart{width:200px;height:200px;border-radius:50%;margin:0 auto;position:relative}
+.pie-legend{display:flex;gap:16px;justify-content:center;margin-top:12px}
+.pie-legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+.pie-legend-dot{width:10px;height:10px;border-radius:50%}
+
+/* streak */
+.streak-list{display:flex;flex-direction:column;gap:6px}
+.streak-item{display:flex;align-items:center;gap:8px;padding:8px 12px;background:var(--card2);border-radius:8px;border:1px solid var(--border)}
+.streak-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0}
+.streak-info{flex:1}
+.streak-info .count{font-size:16px;font-weight:600;color:var(--accent)}
+.streak-info .detail{font-size:11px;color:var(--text2)}
+
+/* cold/hot */
+.zone-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px}
+.zone-ball{border-radius:50%;aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:14px;font-weight:700;position:relative;cursor:pointer;transition:transform .15s}
+.zone-ball:hover{transform:scale(1.12)}
+.zone-ball .freq{font-size:8px;font-weight:400;opacity:.7;margin-top:1px}
+
+/* responsive */
+@media(max-width:640px){
+  .app{padding:12px 8px 60px}
+  .header h1{font-size:22px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-item .value{font-size:22px}
+  .card{padding:14px}
+  .tab{padding:6px 12px;font-size:12px}
+  .dist-label{width:60px;font-size:11px}
+}
+
+/* color scale helper text */
+.scale-legend{display:flex;align-items:center;gap:8px;justify-content:center;margin-top:8px;font-size:11px;color:var(--text2)}
+.scale-bar{width:120px;height:10px;border-radius:3px}
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner"></div>
+  <p>正在加载大乐透历史数据...</p>
+  <div class="progress" id="loadingProgress">请稍候</div>
+</div>
+
+<div class="app">
+  <div class="header">
+    <h1>🎲 大乐透历史数据深度分析</h1>
+    <p>基于物理摇号机全部开奖记录的多维度统计分析</p>
+    <div class="badge" id="dataBadge">数据加载中...</div>
+  </div>
+
+  <div class="tabs" id="tabBar">
+    <div class="tab active" data-panel="overview">📊 总览</div>
+    <div class="tab" data-panel="freq">🔥 号码频率</div>
+    <div class="tab" data-panel="oddeven">⚖️ 奇偶分析</div>
+    <div class="tab" data-panel="bigsmall">📏 大小分析</div>
+    <div class="tab" data-panel="sum">➕ 和值分布</div>
+    <div class="tab" data-panel="streak">🔗 连号统计</div>
+    <div class="tab" data-panel="zone">🗺️ 区间分布</div>
+    <div class="tab" data-panel="history">📋 历史数据</div>
+  </div>
+
+  <!-- 总览面板 -->
+  <div class="panel active" id="panel-overview">
+    <div class="stats-grid" id="overviewStats"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(239,68,68,.15);color:var(--red)">🔥</span> 前区号码频率热力图</div>
+      <div class="heatmap-title">颜色越深=出现次数越多（可点击切换前区/后区）</div>
+      <div class="heatmap-wrap">
+        <div class="heatmap" id="overviewHeatmap"></div>
+      </div>
+      <div class="scale-legend">
+        <span>低频</span>
+        <div class="scale-bar" style="background:linear-gradient(90deg,#1a1a3a,#3b82f6,#22c55e,#f97316,#ef4444)"></div>
+        <span>高频</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(6,182,212,.15);color:var(--cyan)">📈</span> 年度开奖期数趋势</div>
+      <div class="bar-chart" id="yearTrend"></div>
+    </div>
+  </div>
+
+  <!-- 号码频率面板 -->
+  <div class="panel" id="panel-freq">
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(239,68,68,.15);color:var(--red)">🔴</span> 前区号码出现频率（1-35）</div>
+      <div class="year-filter" id="yearFilterFront"></div>
+      <div class="bar-chart" id="frontFreqChart" style="height:200px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(59,130,246,.15);color:var(--blue)">🔵</span> 后区号码出现频率（1-12）</div>
+      <div class="year-filter" id="yearFilterBack"></div>
+      <div class="bar-chart" id="backFreqChart" style="height:160px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(168,85,247,.15);color:var(--purple)">🌡️</span> 号码冷热度排行</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <div style="text-align:center;font-size:13px;color:var(--orange);margin-bottom:8px">🔥 最热号码 TOP10</div>
+          <div class="streak-list" id="hotNumbers"></div>
+        </div>
+        <div>
+          <div style="text-align:center;font-size:13px;color:var(--cyan);margin-bottom:8px">❄️ 最冷号码 TOP10</div>
+          <div class="streak-list" id="coldNumbers"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 奇偶分析面板 -->
+  <div class="panel" id="panel-oddeven">
+    <div class="stats-grid" id="oddEvenStats"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(168,85,247,.15);color:var(--purple)">⚖️</span> 前区奇偶比分布</div>
+      <div class="dist-chart" id="oddEvenDist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(59,130,246,.15);color:var(--blue)">📊</span> 后区奇偶比分布</div>
+      <div class="dist-chart" id="backOddEvenDist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(34,197,94,.15);color:var(--green)">📈</span> 奇偶比年度变化趋势</div>
+      <div class="bar-chart" id="oddEvenTrend" style="height:180px"></div>
+    </div>
+  </div>
+
+  <!-- 大小分析面板 -->
+  <div class="panel" id="panel-bigsmall">
+    <div class="stats-grid" id="bigSmallStats"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(249,115,22,.15);color:var(--orange)">📏</span> 前区大小比分布（≤17为小，≥18为大）</div>
+      <div class="dist-chart" id="bigSmallDist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(6,182,212,.15);color:var(--cyan)">📊</span> 后区大小比分布（≤6为小，≥7为大）</div>
+      <div class="dist-chart" id="backBigSmallDist"></div>
+    </div>
+  </div>
+
+  <!-- 和值分布面板 -->
+  <div class="panel" id="panel-sum">
+    <div class="stats-grid" id="sumStats"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(246,211,101,.15);color:var(--accent)">➕</span> 前区和值分布</div>
+      <div class="bar-chart" id="sumDistChart" style="height:200px"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(59,130,246,.15);color:var(--blue)">➕</span> 后区和值分布</div>
+      <div class="bar-chart" id="backSumDistChart" style="height:160px"></div>
+    </div>
+  </div>
+
+  <!-- 连号统计面板 -->
+  <div class="panel" id="panel-streak">
+    <div class="stats-grid" id="streakStats"></div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(34,197,94,.15);color:var(--green)">🔗</span> 连号出现情况</div>
+      <div class="dist-chart" id="streakDist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(253,160,133,.15);color:var(--accent2)">📋</span> 连号组数分布</div>
+      <div class="dist-chart" id="streakGroupDist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(168,85,247,.15);color:var(--purple)">🎲</span> 常见连号组合 TOP15</div>
+      <div class="streak-list" id="streakPairs"></div>
+    </div>
+  </div>
+
+  <!-- 区间分布面板 -->
+  <div class="panel" id="panel-zone">
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(239,68,68,.15);color:var(--red)">🗺️</span> 前区三区间分布（1-12/13-24/25-35）</div>
+      <div class="dist-chart" id="zone3Dist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(249,115,22,.15);color:var(--orange)">🗺️</span> 前区五区间分布（1-7/8-14/15-21/22-28/29-35）</div>
+      <div class="dist-chart" id="zone5Dist"></div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(59,130,246,.15);color:var(--blue)">🔵</span> 后区号码频率热力图</div>
+      <div class="zone-grid" id="backZoneGrid"></div>
+    </div>
+  </div>
+
+  <!-- 历史数据面板 -->
+  <div class="panel" id="panel-history">
+    <div class="card">
+      <div class="card-title"><span class="icon" style="background:rgba(246,211,101,.15);color:var(--accent)">📋</span> 历史开奖数据查询</div>
+      <div class="year-filter" id="historyYearFilter"></div>
+      <div class="table-scroll">
+        <table class="data-table" id="historyTable">
+          <thead><tr><th>期号</th><th>前区</th><th>后区</th><th>和值</th><th>奇偶</th><th>大小</th></tr></thead>
+          <tbody id="historyBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ========== 数据层 ==========
+let ALL_DATA = []; // [{period, front:[5], back:[2], year}]
+let DATA_LOADED = false;
+
+// 从500star.com批量获取补充数据(2013-2026)
+async function fetchExtraData() {
+  const results = [];
+  const startYear = 2013;
+  const currentYear = new Date().getFullYear();
+
+  const urls = [];
+  for (let y = startYear; y <= currentYear; y++) {
+    const yy = String(y).slice(2);
+    urls.push(`https://datachart.500star.com/dlt/history/newinc/history.php?start=${yy}001&end=${yy}080`);
+    urls.push(`https://datachart.500star.com/dlt/history/newinc/history.php?start=${yy}081&end=${yy}160`);
+  }
+
+  const CORS_PROXIES = [
+    url => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+    url => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+  ];
+
+  async function fetchWithProxy(url) {
+    try {
+      const resp = await fetch(url, {signal: AbortSignal.timeout(5000)});
+      if (resp.ok) {const t = await resp.text(); if(t.length > 500) return t;}
+    } catch(e) {}
+    for (const proxyFn of CORS_PROXIES) {
+      try {
+        const resp = await fetch(proxyFn(url), {signal: AbortSignal.timeout(8000)});
+        if (resp.ok) {const t = await resp.text(); if(t.length > 500) return t;}
+      } catch(e) {}
+    }
+    return null;
+  }
+
+  function parseHTML(html) {
+    const draws = [];
+    const trReg = /<tr[^>]*>([\s\S]*?)<\/tr>/gi;
+    let trMatch;
+    while ((trMatch = trReg.exec(html)) !== null) {
+      const tr = trMatch[1];
+      const tds = [];
+      const tdReg = /<td[^>]*>([\s\S]*?)<\/td>/gi;
+      let tdMatch;
+      while ((tdMatch = tdReg.exec(tr)) !== null) {
+        tds.push(tdMatch[1].replace(/<[^>]+>/g,'').trim());
+      }
+      if (tds.length >= 7) {
+        const period = tds[0];
+        if (!/^\d{5}$/.test(period)) continue;
+        const front = tds.slice(1,6).map(Number);
+        const back = tds.slice(6,8).map(Number);
+        if (front.some(n => n < 1 || n > 35) || back.some(n => n < 1 || n > 12)) continue;
+        if (front.some(isNaN) || back.some(isNaN)) continue;
+        const year = 2000 + parseInt(period.slice(0,2));
+        draws.push({period, front: front.sort((a,b)=>a-b), back: back.sort((a,b)=>a-b), year});
+      }
+    }
+    return draws;
+  }
+
+  // 批量获取，每次5个并发
+  const CONCURRENCY = 5;
+  const batches = [];
+  for (let i = 0; i < urls.length; i += CONCURRENCY) {
+    batches.push(urls.slice(i, i + CONCURRENCY));
+  }
+
+  let loaded = 0;
+  const total = urls.length;
+
+  for (const batch of batches) {
+    const promises = batch.map(async (url) => {
+      const html = await fetchWithProxy(url);
+      loaded++;
+      const pct = Math.round(loaded / total * 100);
+      const prog = document.getElementById('loadingProgress');
+      if (prog) prog.textContent = `补充数据: ${pct}% (${loaded}/${total})`;
+      if (html) return parseHTML(html);
+      return [];
+    });
+    const batchResults = await Promise.all(promises);
+    for (const draws of batchResults) {
+      results.push(...draws);
+    }
+  }
+
+  return results;
+}
+
+// ========== 备用数据（2007-2012年完整数据，已通过WebFetch验证） ==========
+const FALLBACK_DATA = [
+// 2007年 (07001-07093)
+[07001,22,24,29,31,35,4,11],[07002,15,22,31,34,35,5,12],[07003,3,4,18,23,32,1,6],
+[07004,6,10,16,17,25,2,4],[07005,1,9,19,20,30,2,11],[07006,1,16,20,23,28,3,6],
+[07007,14,16,25,26,35,4,9],[07008,2,8,11,21,23,4,7],[07009,1,3,9,19,34,9,12],
+[07010,6,8,18,29,34,9,11],[07011,29,32,33,34,35,9,10],[07012,3,12,15,29,34,7,11],
+[07013,12,17,27,29,34,6,9],[07014,1,2,7,29,32,6,7],[07015,2,8,12,13,17,11,12],
+[07016,1,14,19,24,31,3,12],[07017,13,14,29,32,34,3,12],[07018,3,4,16,23,28,6,9],
+[07019,3,6,17,22,23,4,6],[07020,2,6,11,12,18,5,12],[07021,2,4,24,29,33,1,2],
+[07022,8,10,12,23,25,3,10],[07023,8,10,23,32,34,8,10],[07024,6,16,20,25,31,4,9],
+[07025,22,24,26,27,34,2,10],[07026,5,9,13,33,35,1,8],[07027,2,3,10,19,27,6,10],
+[07028,20,26,30,34,35,3,10],[07029,15,22,25,29,35,9,11],[07030,11,14,27,33,35,2,7],
+[07031,3,21,27,31,32,6,8],[07032,1,13,21,23,32,4,11],[07033,1,5,8,14,22,3,12],
+[07034,6,8,11,13,22,2,11],[07035,7,11,16,31,32,1,12],[07036,15,18,21,27,34,1,2],
+[07037,1,6,7,17,31,11,12],[07038,6,21,25,27,32,8,9],[07039,10,11,20,21,35,7,11],
+[07040,5,21,25,28,35,1,4],[07041,3,16,17,22,35,1,8],[07042,7,10,22,31,35,5,6],
+[07043,4,9,22,24,31,2,6],[07044,4,5,7,12,26,1,10],[07045,9,16,20,26,35,11,12],
+[07046,4,16,18,23,30,1,10],[07047,1,6,15,19,35,2,9],[07048,8,25,26,29,35,6,8],
+[07049,9,10,15,17,32,4,6],[07050,13,21,22,30,35,1,11],[07051,3,7,24,28,35,8,11],
+[07052,1,14,29,32,33,5,10],[07053,11,16,19,21,25,1,10],[07054,4,10,19,29,34,3,6],
+[07055,10,16,24,31,33,7,10],[07056,4,11,17,20,21,5,9],[07057,14,16,30,32,35,6,7],
+[07058,8,21,25,28,33,2,6],[07059,4,15,23,31,33,3,9],[07060,12,13,29,30,31,4,7],
+[07061,2,10,19,28,29,2,9],[07062,1,4,10,14,29,11,12],[07063,10,31,33,34,35,7,12],
+[07064,2,16,32,33,35,5,10],[07065,19,20,24,29,31,9,10],[07066,4,7,8,19,24,7,12],
+[07067,11,18,25,30,31,4,9],[07068,4,9,13,14,33,6,10],[07069,2,13,16,21,35,1,5],
+[07070,7,26,29,30,35,3,4],[07071,10,22,32,33,35,1,7],[07072,21,24,26,27,33,1,5],
+[07073,4,5,9,12,23,2,11],[07074,16,17,23,24,31,5,10],[07075,5,11,20,30,32,7,11],
+[07076,2,9,12,15,31,9,10],[07077,4,6,12,13,24,1,4],[07078,9,12,14,22,23,1,2],
+[07079,6,9,25,26,31,2,8],[07080,1,15,20,25,27,5,10],[07081,6,18,20,22,35,4,9],
+[07082,3,5,14,33,34,7,8],[07083,1,5,20,21,24,3,4],[07084,5,11,18,29,34,10,11],
+[07085,17,24,28,29,33,2,5],[07086,14,18,19,26,28,3,9],[07087,8,18,30,31,33,4,9],
+[07088,17,18,21,23,33,6,10],[07089,8,13,24,30,34,1,12],[07090,4,20,24,31,33,9,12],
+[07091,7,12,26,31,32,3,8],[07092,6,19,27,28,29,6,10],[07093,6,8,16,25,27,8,12],
+// 2008年 (08001-08150)
+[08001,1,2,11,34,35,3,10],[08002,1,12,24,31,32,10,12],[08003,1,11,13,32,35,2,7],
+[08004,9,22,24,31,33,8,9],[08005,18,25,29,31,34,9,10],[08006,10,12,26,29,34,5,7],
+[08007,3,4,5,12,28,3,12],[08008,2,6,8,17,32,8,9],[08009,4,8,12,24,30,5,8],
+[08010,6,23,24,27,29,6,8],[08011,14,20,22,24,27,7,10],[08012,2,10,29,32,35,2,3],
+[08013,1,11,19,22,35,5,9],[08014,4,7,10,28,34,1,6],[08015,9,18,20,27,33,6,9],
+[08016,8,10,11,17,19,6,9],[08017,2,14,25,29,32,1,6],[08018,3,6,7,11,30,2,3],
+[08019,8,24,25,29,31,4,5],[08020,4,5,15,17,33,4,8],[08021,5,10,13,21,24,4,9],
+[08022,9,12,13,25,31,8,10],[08023,6,26,31,32,34,7,10],[08024,8,12,17,20,30,1,2],
+[08025,6,10,12,15,28,4,12],[08026,1,21,22,24,25,8,10],[08027,5,17,23,31,32,4,8],
+[08028,3,11,17,19,26,7,12],[08029,6,11,18,29,30,4,11],[08030,3,21,23,26,35,5,8],
+[08031,14,20,23,27,28,2,4],[08032,3,9,19,27,33,9,10],[08033,3,10,21,23,30,1,9],
+[08034,6,7,18,34,35,5,10],[08035,2,12,13,29,30,5,7],[08036,9,19,22,30,32,1,10],
+[08037,11,20,24,31,35,4,10],[08038,12,13,19,32,33,2,10],[08039,7,11,15,27,35,4,7],
+[08040,4,8,19,22,29,8,11],[08041,7,17,21,22,28,5,10],[08042,5,10,13,32,35,4,5],
+[08043,5,8,10,31,33,2,4],[08044,2,21,23,27,32,10,11],[08045,14,32,33,34,35,2,4],
+[08046,11,25,26,27,35,7,8],[08047,12,18,22,23,30,6,12],[08048,1,13,22,25,27,2,10],
+[08049,1,11,14,28,30,3,10],[08050,1,5,11,26,27,3,7],[08051,1,7,9,11,33,3,11],
+[08052,3,18,19,30,35,5,9],[08053,1,13,21,23,32,3,6],[08054,5,14,23,31,35,2,6],
+[08055,2,14,28,30,35,4,12],[08056,15,19,25,30,31,3,9],[08057,5,8,9,17,33,5,6],
+[08058,3,9,11,29,33,3,12],[08059,7,13,21,25,31,8,10],[08060,3,13,17,23,30,1,11],
+[08061,7,10,14,19,32,3,6],[08062,1,15,27,28,29,3,10],[08063,7,11,24,30,35,6,8],
+[08064,14,18,24,27,31,6,7],[08065,19,22,23,25,32,6,12],[08066,2,7,21,22,25,4,12],
+[08067,3,10,14,15,22,4,7],[08068,6,9,11,33,34,6,10],[08069,5,13,16,29,33,6,8],
+[08070,9,17,18,21,31,1,5],[08071,1,5,11,14,25,1,9],[08072,10,25,32,33,34,3,9],
+[08073,2,5,6,7,31,8,10],[08074,10,13,22,31,35,4,12],[08075,1,10,13,30,33,6,7],
+[08076,3,5,10,27,34,1,12],[08077,1,8,21,33,34,5,7],[08078,8,17,20,28,31,7,11],
+[08079,20,23,26,32,33,5,12],[08080,6,9,29,31,33,5,11],[08081,7,8,20,22,29,4,7],
+[08082,15,19,29,33,35,1,2],[08083,6,14,15,30,31,3,10],[08084,2,17,20,22,25,5,11],
+[08085,3,7,13,15,19,2,10],[08086,1,6,10,22,35,3,7],[08087,14,22,32,33,35,1,5],
+[08088,7,11,19,27,31,2,3],[08089,8,13,24,32,33,3,9],[08090,4,11,18,33,34,2,6],
+[08091,9,13,19,22,25,4,10],[08092,3,23,26,32,34,4,9],[08093,6,7,10,24,30,5,8],
+[08094,7,12,19,27,34,11,12],[08095,3,4,11,21,25,1,7],[08096,6,7,12,25,28,2,12],
+[08097,1,10,31,33,35,3,10],[08098,7,10,22,27,33,4,8],[08099,3,18,23,25,30,6,10],
+[08100,12,20,26,29,30,2,6],[08101,10,13,23,31,33,4,11],[08102,5,25,26,29,35,3,10],
+[08103,2,11,22,30,34,4,9],[08104,7,8,10,24,34,8,11],[08105,12,21,22,26,35,4,5],
+[08106,3,5,21,28,33,2,6],[08107,1,2,13,15,16,4,9],[08108,11,16,24,29,32,9,11],
+[08109,1,10,18,28,34,5,8],[08110,5,16,25,27,33,4,9],[08111,2,11,12,14,19,5,9],
+[08112,4,18,26,32,33,5,8],[08113,11,14,17,19,22,1,8],[08114,2,3,22,27,31,6,7],
+[08115,7,9,19,21,33,7,10],[08116,6,8,15,24,31,1,3],[08117,13,23,24,25,30,2,8],
+[08118,6,9,19,25,30,6,12],[08119,1,2,10,19,27,1,11],[08120,21,23,24,25,32,3,4],
+[08121,11,23,24,32,35,4,10],[08122,3,6,12,20,29,9,12],[08123,1,6,12,28,31,8,9],
+[08124,2,10,13,29,33,6,10],[08125,1,4,28,33,34,6,11],[08126,9,29,32,34,35,1,8],
+[08127,8,21,22,31,33,1,7],[08128,12,15,23,24,25,10,11],[08129,13,16,20,25,27,4,5],
+[08130,3,5,22,29,34,7,12],[08131,8,9,12,21,32,7,11],[08132,6,14,24,27,29,5,9],
+[08133,10,12,15,33,35,3,9],[08134,11,13,15,28,35,8,10],[08135,7,22,25,29,33,1,12],
+[08136,3,28,29,32,34,1,6],[08137,1,10,25,32,35,5,9],[08138,4,5,18,22,35,7,8],
+[08139,1,6,10,14,22,6,8],[08140,2,9,11,29,32,8,9],[08141,9,15,18,30,34,4,5],
+[08142,6,18,21,30,35,8,9],[08143,1,2,22,29,32,1,4],[08144,10,19,27,28,33,5,12],
+[08145,5,16,27,29,30,5,11],[08146,9,23,24,26,33,7,12],[08147,16,18,19,24,35,11,12],
+[08148,3,7,20,33,35,4,7],[08149,2,5,6,27,29,3,4],[08150,1,9,10,15,25,3,8],
+// 2009年 (09001-09150)
+[09001,1,15,23,27,30,4,10],[09002,1,4,7,12,30,5,10],[09003,16,18,23,30,32,2,11],
+[09004,1,3,22,32,35,6,10],[09005,10,11,15,31,32,5,8],[09006,2,4,22,31,35,9,12],
+[09007,6,14,15,29,35,6,11],[09008,4,17,21,29,31,2,12],[09009,12,18,23,26,32,6,9],
+[09010,2,9,12,21,29,7,11],[09011,2,11,13,14,21,2,4],[09012,2,5,20,25,31,10,12],
+[09013,5,24,26,30,35,5,12],[09014,8,14,15,25,26,7,9],[09015,1,5,10,16,27,3,4],
+[09016,10,11,20,26,27,9,11],[09017,5,11,23,26,33,4,12],[09018,1,6,13,28,29,3,9],
+[09019,4,29,31,32,35,4,10],[09020,5,16,18,32,35,2,11],[09021,1,15,31,32,34,3,8],
+[09022,12,14,17,34,35,4,11],[09023,15,17,21,27,33,7,11],[09024,29,31,32,33,35,10,11],
+[09025,3,17,22,23,33,4,10],[09026,24,30,31,32,34,10,12],[09027,3,22,26,33,34,9,10],
+[09028,6,20,30,32,35,9,11],[09029,3,4,13,17,24,4,11],[09030,1,7,27,30,32,1,4],
+[09031,7,11,19,21,22,1,11],[09032,4,12,20,26,29,6,10],[09033,2,8,18,21,32,8,11],
+[09034,5,19,31,32,35,4,9],[09035,3,7,9,28,33,3,8],[09036,2,12,26,31,33,9,10],
+[09037,17,18,19,25,31,1,11],[09038,6,17,20,29,32,4,5],[09039,1,3,7,10,33,3,4],
+[09040,3,16,30,32,33,1,10],[09041,5,9,20,23,29,4,10],[09042,11,24,25,26,31,2,7],
+[09043,5,21,22,32,35,2,5],[09044,1,7,18,29,34,3,9],[09045,1,9,14,24,35,6,9],
+[09046,1,9,24,34,35,4,9],[09047,13,18,21,24,29,3,6],[09048,5,6,22,25,27,11,12],
+[09049,5,16,28,29,34,11,12],[09050,5,15,28,32,33,8,9],[09051,3,11,22,26,29,5,12],
+[09052,23,24,30,34,35,1,3],[09053,5,9,24,31,33,5,6],[09054,2,12,19,29,30,7,12],
+[09055,5,8,14,23,24,5,6],[09056,4,13,17,32,35,3,6],[09057,6,15,22,27,30,2,9],
+[09058,8,10,14,27,32,2,7],[09059,2,13,14,29,33,4,11],[09060,18,28,29,30,31,4,8],
+[09061,2,10,21,26,34,2,10],[09062,4,22,23,29,31,5,11],[09063,5,6,18,21,22,1,7],
+[09064,6,10,11,17,34,11,12],[09065,1,12,24,27,32,2,11],[09066,1,8,19,24,31,6,12],
+[09067,3,6,25,28,32,2,5],[09068,2,12,15,20,28,1,12],[09069,14,16,27,30,33,8,12],
+[09070,10,21,24,30,31,3,10],[09071,4,20,29,30,33,2,11],[09072,23,26,29,32,33,5,10],
+[09073,1,10,19,21,30,1,4],[09074,15,17,19,23,32,1,11],[09075,1,7,11,32,33,9,11],
+[09076,3,9,11,18,24,4,5],[09077,7,20,28,32,34,6,8],[09078,11,23,26,31,34,5,11],
+[09079,1,2,7,13,34,4,10],[09080,7,16,19,29,35,2,11],[09081,2,15,20,25,33,3,6],
+[09082,5,11,26,29,32,8,11],[09083,2,5,28,34,35,1,7],[09084,5,9,19,26,35,2,10],
+[09085,6,13,27,33,34,9,12],[09086,1,2,7,26,29,10,12],[09087,10,24,28,30,33,1,10],
+[09088,13,16,27,32,34,3,9],[09089,3,6,11,19,27,2,7],[09090,18,25,30,33,34,4,10],
+[09091,1,5,17,32,34,3,7],[09092,10,21,22,27,29,8,12],[09093,7,9,22,30,33,9,11],
+[09094,1,5,21,23,29,5,12],[09095,8,18,24,30,33,1,6],[09096,7,12,28,32,33,1,3],
+[09097,6,13,14,22,25,1,4],[09098,11,17,19,25,26,2,10],[09099,3,9,21,23,33,6,10],
+[09100,16,20,25,29,33,1,8],[09101,2,10,14,22,26,4,9],[09102,11,13,29,32,35,10,12],
+[09103,16,20,28,32,33,1,2],[09104,15,25,29,32,33,10,11],[09105,1,25,26,34,35,6,11],
+[09106,11,21,22,25,34,6,9],[09107,11,12,33,34,35,1,10],[09108,1,9,14,29,30,7,10],
+[09109,2,11,13,26,35,6,10],[09110,22,28,30,31,34,7,9],[09111,4,11,13,19,35,10,12],
+[09112,2,8,12,34,35,4,5],[09113,3,4,10,18,27,6,8],[09114,2,8,25,29,33,3,7],
+[09115,1,2,6,8,26,5,12],[09116,12,15,23,30,33,9,12],[09117,7,21,29,31,33,9,10],
+[09118,10,17,18,21,34,5,11],[09119,3,12,22,23,28,4,12],[09120,11,23,27,28,32,2,5],
+[09121,4,5,8,11,22,2,10],[09122,1,2,11,31,33,5,6],[09123,10,21,28,29,32,6,10],
+[09124,1,3,14,32,35,7,11],[09125,8,20,23,29,31,2,11],[09126,14,23,27,28,33,8,12],
+[09127,5,9,27,32,34,5,8],[09128,6,21,28,32,34,4,7],[09129,2,10,18,32,33,3,8],
+[09130,9,14,25,32,34,2,8],[09131,2,3,8,33,34,3,11],[09132,2,10,12,15,28,4,7],
+[09133,1,8,24,27,34,10,11],[09134,2,16,19,28,33,7,11],[09135,6,8,15,20,32,5,6],
+[09136,7,13,23,24,29,6,10],[09137,12,28,29,30,34,1,9],[09138,3,4,14,28,32,9,10],
+[09139,14,16,20,22,32,5,9],[09140,7,8,19,26,30,1,12],[09141,13,14,21,30,33,2,8],
+[09142,5,6,13,24,31,3,11],[09143,1,9,10,11,22,1,12],[09144,18,26,32,33,34,4,6],
+[09145,5,11,14,22,35,3,10],[09146,11,17,23,24,25,3,6],[09147,6,12,18,22,29,5,8],
+[09148,2,4,13,14,33,1,9],[09149,1,3,10,12,20,2,7],[09150,4,11,18,25,34,5,7],
+// 2010年 (10001-10150)
+[10001,2,6,7,12,27,2,8],[10002,4,23,25,26,30,7,10],[10003,5,14,23,27,30,2,8],
+[10004,3,6,21,24,34,4,6],[10005,4,17,19,22,30,2,3],[10006,3,13,19,30,34,2,5],
+[10007,7,23,26,29,32,8,11],[10008,11,23,25,31,32,5,11],[10009,2,5,13,27,32,3,11],
+[10010,15,22,24,32,35,2,9],[10011,2,3,11,27,32,8,11],[10012,20,24,30,31,33,5,12],
+[10013,18,21,22,26,34,9,12],[10014,18,19,30,33,35,2,4],[10015,3,10,14,18,28,8,10],
+[10016,10,12,20,23,32,4,10],[10017,13,21,23,27,34,9,12],[10018,3,10,26,32,33,4,12],
+[10019,3,11,19,26,27,2,9],[10020,8,18,26,32,33,1,6],[10021,11,20,23,24,25,7,9],
+[10022,2,11,13,14,25,2,5],[10023,11,13,29,32,33,2,8],[10024,3,14,19,24,25,4,11],
+[10025,9,11,13,14,25,1,7],[10026,5,23,25,31,35,7,10],[10027,5,23,26,32,34,2,9],
+[10028,1,2,7,20,35,1,3],[10029,21,22,33,34,35,3,4],[10030,10,12,19,32,35,2,7],
+[10031,5,13,16,17,35,6,8],[10032,13,16,23,24,33,7,11],[10033,12,19,28,29,30,5,8],
+[10034,1,6,19,25,26,3,9],[10035,14,16,20,31,34,1,7],[10036,19,25,28,31,33,1,8],
+[10037,19,21,26,34,35,1,9],[10038,8,10,25,29,33,1,2],[10039,7,19,26,28,32,1,8],
+[10040,13,20,26,31,35,2,11],[10041,16,22,28,29,34,4,12],[10042,1,5,19,34,35,6,7],
+[10043,5,8,10,33,35,2,10],[10044,6,21,24,28,30,2,7],[10045,8,17,18,20,28,9,10],
+[10046,2,15,19,26,27,5,6],[10047,4,8,11,30,31,2,8],[10048,2,3,10,12,25,3,9],
+[10049,1,25,29,31,33,4,10],[10050,7,8,15,30,35,5,10],[10051,6,10,20,24,32,6,10],
+[10052,4,6,25,29,32,5,6],[10053,9,19,22,26,34,9,11],[10054,12,25,29,30,33,10,11],
+[10055,13,14,17,27,32,2,10],[10056,5,9,23,25,30,9,12],[10057,15,17,24,32,35,7,9],
+[10058,6,15,17,19,30,1,12],[10059,6,10,14,25,34,1,3],[10060,10,13,22,33,34,1,5],
+[10061,5,12,14,17,22,5,7],[10062,6,7,18,30,31,7,8],[10063,7,14,16,30,31,3,6],
+[10064,7,10,12,20,21,6,9],[10065,5,8,13,14,32,8,11],[10066,15,21,22,24,27,1,6],
+[10067,1,11,19,30,32,3,10],[10068,11,17,19,20,34,6,10],[10069,6,17,18,25,29,8,9],
+[10070,5,14,23,25,28,11,12],[10071,7,12,26,30,32,2,7],[10072,5,10,17,23,25,3,10],
+[10073,4,9,11,30,32,1,11],[10074,3,7,20,27,32,2,12],[10075,10,12,17,23,27,5,7],
+[10076,9,12,16,19,35,2,12],[10077,6,7,9,17,24,2,12],[10078,2,3,15,28,35,1,11],
+[10079,1,4,21,22,24,2,5],[10080,8,19,27,29,34,4,10],[10081,14,18,20,24,27,5,10],
+[10082,5,8,24,29,30,4,6],[10083,7,11,21,22,35,4,7],[10084,3,13,14,22,26,2,5],
+[10085,2,10,16,18,34,2,3],[10086,1,2,12,19,35,5,7],[10087,1,12,20,21,24,2,8],
+[10088,3,5,14,30,35,3,6],[10089,4,10,13,18,23,8,10],[10090,8,24,26,31,32,7,9],
+[10091,6,10,23,26,31,5,7],[10092,2,15,29,30,34,2,12],[10093,2,4,9,28,29,5,8],
+[10094,20,32,33,34,35,6,7],[10095,12,14,16,19,25,1,6],[10096,4,9,24,30,35,1,10],
+[10097,9,17,21,28,29,2,8],[10098,2,3,12,13,25,1,7],[10099,3,11,17,21,30,1,8],
+[10100,19,20,30,33,35,6,8],[10101,11,15,22,27,35,5,8],[10102,4,15,19,24,35,1,10],
+[10103,10,14,29,30,35,5,8],[10104,14,25,30,32,33,1,11],[10105,5,17,26,27,35,8,9],
+[10106,5,27,28,29,34,9,12],[10107,14,17,22,27,34,3,5],[10108,1,10,13,19,34,9,12],
+[10109,1,2,8,11,25,10,12],[10110,21,29,30,33,35,7,11],[10111,3,6,13,14,29,1,2],
+[10112,14,15,18,34,35,8,10],[10113,5,16,22,23,32,4,10],[10114,3,7,22,25,35,3,11],
+[10115,5,7,10,15,32,3,8],[10116,14,22,27,28,35,4,10],[10117,4,6,21,27,34,5,9],
+[10118,19,22,23,29,35,8,10],[10119,5,13,14,23,26,2,3],[10120,8,10,18,34,35,6,10],
+[10121,21,22,31,32,34,2,12],[10122,5,6,11,13,26,2,7],[10123,18,20,30,32,33,1,11],
+[10124,1,9,27,29,34,1,6],[10125,1,7,9,14,19,9,12],[10126,3,5,9,13,33,5,11],
+[10127,3,22,24,30,33,4,10],[10128,6,17,19,29,35,2,8],[10129,14,15,24,25,26,3,7],
+[10130,5,6,9,10,34,8,11],[10131,10,15,22,28,29,4,12],[10132,18,21,23,25,29,6,11],
+[10133,11,16,17,21,22,3,6],[10134,9,12,13,19,30,4,5],[10135,14,17,19,26,32,3,4],
+[10136,3,13,18,30,33,7,8],[10137,22,27,28,33,35,9,11],[10138,8,12,14,19,27,5,6],
+[10139,3,13,16,19,29,7,9],[10140,6,18,20,30,31,3,6],[10141,5,11,17,23,33,3,10],
+[10142,10,11,19,21,27,4,6],[10143,10,16,18,22,27,6,8],[10144,2,11,16,22,31,10,11],
+[10145,18,19,27,28,33,3,6],[10146,14,17,30,31,34,4,10],[10147,1,15,19,21,23,11,12],
+[10148,3,4,8,10,35,2,6],[10149,5,22,24,25,30,1,6],[10150,5,24,28,29,35,1,9],
+// 2011年 (11001-11154)
+[11001,7,8,15,32,34,5,12],[11002,11,13,27,28,29,2,6],[11003,1,24,27,30,31,1,6],
+[11004,7,8,10,23,25,7,9],[11005,1,7,25,27,30,7,12],[11006,2,8,16,26,35,11,12],
+[11007,14,24,32,33,35,2,9],[11008,1,23,26,27,30,5,6],[11009,9,10,11,14,24,3,8],
+[11010,4,8,10,14,27,5,7],[11011,2,17,23,24,30,2,9],[11012,3,12,19,25,30,8,11],
+[11013,5,8,14,28,30,4,6],[11014,2,14,20,21,24,2,9],[11015,8,18,19,22,23,1,3],
+[11016,15,20,30,33,35,6,9],[11017,16,19,24,26,31,2,4],[11018,16,22,24,32,34,2,10],
+[11019,8,21,23,27,33,6,11],[11020,9,12,19,22,28,1,5],[11021,1,9,13,17,30,2,8],
+[11022,9,14,24,25,34,1,4],[11023,5,13,16,18,24,2,12],[11024,12,15,16,20,33,8,12],
+[11025,8,9,25,28,29,2,10],[11026,1,9,15,20,29,7,9],[11027,5,14,25,34,35,2,5],
+[11028,1,2,13,17,28,1,4],[11029,3,9,17,24,28,6,12],[11030,15,19,25,30,33,3,8],
+[11031,12,17,19,22,35,4,11],[11032,7,16,23,31,33,3,10],[11033,3,19,24,29,33,3,9],
+[11034,3,6,9,17,27,3,9],[11035,3,4,13,15,32,4,9],[11036,3,18,29,30,33,8,9],
+[11037,1,12,14,22,24,10,12],[11038,7,9,11,13,33,10,12],[11039,1,11,14,22,34,6,8],
+[11040,3,7,15,18,20,1,6],[11041,4,5,11,13,25,3,6],[11042,6,9,18,30,32,10,12],
+[11043,2,8,23,33,35,5,10],[11044,11,21,24,26,31,6,7],[11045,13,21,22,29,31,7,11],
+[11046,9,15,16,19,29,4,6],[11047,2,15,22,33,35,5,8],[11048,13,17,25,27,28,2,3],
+[11049,5,6,10,22,25,1,9],[11050,4,7,29,32,33,8,10],[11051,6,8,12,17,18,5,10],
+[11052,13,24,31,32,33,3,9],[11053,3,16,28,31,32,1,9],[11054,5,9,16,26,35,3,10],
+[11055,1,7,31,32,35,2,10],[11056,3,5,29,30,31,8,10],[11057,7,11,30,31,34,9,12],
+[11058,1,9,27,32,33,3,6],[11059,9,16,21,29,34,7,10],[11060,3,25,29,32,34,9,10],
+[11061,6,7,16,18,20,4,10],[11062,6,10,17,20,21,3,7],[11063,10,17,18,26,32,1,5],
+[11064,1,6,27,30,34,1,6],[11065,3,11,14,25,34,1,4],[11066,6,13,18,20,33,9,10],
+[11067,10,17,22,24,32,3,10],[11068,1,13,16,18,32,7,9],[11069,3,5,28,29,33,4,12],
+[11070,9,19,22,29,30,2,8],[11071,27,31,33,34,35,4,6],[11072,3,11,13,20,35,3,8],
+[11073,13,19,20,22,33,5,11],[11074,7,16,23,28,31,3,6],[11075,6,9,20,23,28,6,10],
+[11076,18,23,25,29,30,1,2],[11077,5,8,19,33,34,1,12],[11078,4,9,16,27,30,2,6],
+[11079,1,3,23,30,31,2,10],[11080,5,12,30,31,32,1,3],
+[11081,4,13,20,21,35,2,9],[11082,7,20,25,30,32,5,9],[11083,6,8,18,20,24,4,8],
+[11084,14,29,31,34,35,1,12],[11085,2,17,19,21,22,3,10],[11086,4,5,6,9,15,1,6],
+[11087,6,13,20,25,34,7,9],[11088,20,21,27,29,35,3,8],[11089,5,6,23,27,34,3,4],
+[11090,2,4,29,30,34,5,8],[11091,11,17,23,29,30,6,8],[11092,10,17,19,32,33,1,12],
+[11093,4,6,8,19,31,10,11],[11094,11,21,22,32,34,4,8],[11095,9,12,17,19,29,6,11],
+[11096,3,8,20,24,25,1,2],[11097,4,19,28,31,33,11,12],[11098,6,7,28,33,35,1,10],
+[11099,2,6,9,12,20,5,8],[11100,8,11,13,28,33,8,9],[11101,5,12,20,28,30,3,7],
+[11102,19,24,28,31,34,4,12],[11103,3,4,26,29,34,1,3],[11104,7,19,27,28,34,2,5],
+[11105,2,11,26,32,33,5,12],[11106,1,9,29,30,35,5,9],[11107,2,6,18,30,32,1,8],
+[11108,7,15,18,24,28,1,7],[11109,1,11,12,22,34,8,10],[11110,30,31,33,34,35,4,7],
+[11111,2,11,13,23,31,11,12],[11112,6,17,28,32,33,8,12],[11113,4,5,7,10,12,4,5],
+[11114,6,8,17,27,35,2,11],[11115,17,26,30,31,35,6,11],[11116,10,15,18,19,26,7,12],
+[11117,10,12,28,32,33,3,5],[11118,4,7,11,32,35,5,7],[11119,4,15,20,26,31,6,12],
+[11120,20,25,26,30,31,9,10],[11121,2,3,30,31,33,3,9],[11122,3,8,23,24,34,5,12],
+[11123,10,14,18,19,35,1,6],[11124,8,12,14,20,25,6,8],[11125,7,10,27,34,35,10,12],
+[11126,7,17,29,30,33,10,12],[11127,1,11,22,26,29,5,8],[11128,3,4,6,11,13,1,2],
+[11129,1,7,13,18,23,4,8],[11130,8,9,13,23,35,11,12],[11131,3,5,12,18,33,7,11],
+[11132,12,14,16,19,33,2,9],[11133,4,11,23,26,35,3,12],[11134,1,10,12,14,17,9,10],
+[11135,6,22,29,33,35,3,12],[11136,8,9,11,19,33,3,12],[11137,2,15,18,23,31,1,2],
+[11138,17,23,26,30,32,6,12],[11139,4,6,10,15,16,3,4],[11140,1,12,32,33,34,9,11],
+[11141,2,11,19,22,35,10,12],[11142,4,26,30,33,34,4,6],[11143,8,9,12,25,33,7,10],
+[11144,7,18,24,28,33,2,3],[11145,7,15,19,24,29,4,6],[11146,9,13,19,29,34,2,11],
+[11147,1,15,16,27,28,2,7],[11148,7,10,11,26,31,3,4],[11149,2,7,12,29,31,3,5],
+[11150,13,22,30,33,34,6,12],[11151,7,11,14,20,27,3,10],[11152,1,4,6,21,35,2,11],
+[11153,6,22,29,30,35,3,5],[11154,4,12,16,20,28,8,11],
+// 2012年 (12001-12154)
+[12001,7,27,28,32,33,1,12],[12002,3,11,14,26,29,7,8],[12003,16,22,24,33,34,3,10],
+[12004,10,11,22,31,32,6,7],[12005,1,2,29,31,33,7,12],[12006,3,20,22,25,27,1,9],
+[12007,4,5,13,17,25,7,10],[12008,6,8,30,31,32,1,11],[12009,6,14,20,29,35,9,10],
+[12010,25,26,29,32,34,5,7],[12011,5,19,22,29,30,2,4],[12012,6,18,22,30,35,2,7],
+[12013,7,8,11,12,24,1,2],[12014,10,14,24,30,32,1,12],[12015,12,13,24,26,33,6,8],
+[12016,5,14,20,29,31,8,12],[12017,6,11,22,29,34,3,12],[12018,3,10,14,29,31,4,8],
+[12019,7,9,17,30,34,1,12],[12020,12,14,27,29,34,3,6],[12021,10,15,21,31,34,7,8],
+[12022,7,12,20,33,35,1,10],[12023,7,9,17,29,35,9,10],[12024,3,11,17,21,30,3,7],
+[12025,1,2,5,12,27,4,7],[12026,10,11,22,23,29,2,9],[12027,3,10,11,22,31,5,7],
+[12028,10,12,15,33,34,3,10],[12029,4,7,8,18,29,7,10],[12030,3,21,22,26,32,1,3],
+[12031,19,21,23,25,30,3,8],[12032,7,8,16,26,34,7,11],[12033,8,13,19,27,32,1,8],
+[12034,1,8,15,16,29,8,9],[12035,1,4,30,32,35,8,12],[12036,1,9,20,30,31,8,12],
+[12037,9,13,27,31,35,3,10],[12038,11,23,25,31,35,1,3],[12039,15,21,22,24,35,1,5],
+[12040,2,13,23,28,29,1,5],[12041,1,2,13,22,23,2,10],[12042,7,24,27,28,35,7,12],
+[12043,1,6,25,31,34,3,9],[12044,3,4,14,32,35,1,2],[12045,5,11,17,20,28,11,12],
+[12046,4,8,19,23,27,4,11],[12047,5,7,17,30,34,3,10],[12048,6,9,26,30,35,5,6],
+[12049,9,18,22,27,31,10,12],[12050,13,17,22,28,29,1,10],[12051,1,2,17,18,33,5,12],
+[12052,10,20,26,31,33,10,12],[12053,11,12,26,28,31,7,12],[12054,1,16,18,27,30,10,11],
+[12055,7,22,26,32,33,1,8],[12056,11,21,23,26,34,7,9],[12057,1,2,14,33,34,3,5],
+[12058,13,21,29,31,35,4,12],[12059,9,13,19,21,27,3,4],[12060,2,16,21,24,30,6,10],
+[12061,5,10,14,27,33,7,9],[12062,21,32,33,34,35,8,9],[12063,11,25,26,29,35,1,2],
+[12064,9,12,13,15,30,9,10],[12065,10,22,28,29,34,5,11],[12066,1,20,25,29,33,4,6],
+[12067,20,22,27,30,33,1,2],[12068,1,21,31,32,35,3,6],[12069,2,4,22,25,34,2,11],
+[12070,9,22,23,32,34,6,8],[12071,13,23,29,31,34,6,8],[12072,4,8,17,22,25,4,10],
+[12073,18,23,29,33,34,2,7],[12074,10,22,23,30,32,1,7],[12075,7,9,10,18,22,5,10],
+[12076,2,14,16,22,24,2,5],[12077,10,30,32,33,34,2,3],[12078,1,2,23,25,35,5,12],
+[12079,1,5,25,32,33,1,10],[12080,11,12,14,25,28,2,5],
+[12081,10,16,17,30,35,1,8],[12082,2,4,9,10,15,8,10],[12083,16,19,28,29,31,5,8],
+[12084,21,24,27,29,31,1,2],[12085,7,18,29,31,33,10,12],[12086,3,20,25,29,32,5,10],
+[12087,1,6,7,21,31,4,11],[12088,13,17,24,30,35,2,10],[12089,6,12,21,29,32,6,11],
+[12090,2,21,27,29,33,2,10],[12091,3,10,28,31,33,1,9],[12092,8,9,23,25,31,2,12],
+[12093,2,16,21,31,33,4,11],[12094,2,14,23,32,35,1,10],[12095,6,9,22,27,30,8,12],
+[12096,5,10,19,24,35,8,9],[12097,9,17,24,29,32,1,2],[12098,2,11,28,29,30,6,12],
+[12099,12,18,24,25,32,2,12],[12100,7,9,13,19,27,1,3],[12101,2,5,8,9,31,3,7],
+[12102,2,4,6,13,35,4,8],[12103,2,9,18,23,24,1,4],[12104,16,18,24,25,27,4,9],
+[12105,5,6,14,15,31,6,8],[12106,15,23,25,29,31,9,10],[12107,4,7,9,22,33,1,3],
+[12108,6,7,12,24,35,2,6],[12109,1,22,30,32,35,9,11],[12110,1,11,17,19,26,5,12],
+[12111,1,24,25,30,33,4,11],[12112,1,2,28,31,35,5,7],[12113,3,10,22,27,29,3,12],
+[12114,3,6,21,33,35,1,7],[12115,1,6,13,19,23,6,9],[12116,1,11,18,20,22,7,10],
+[12117,1,12,18,21,33,7,8],[12118,5,17,25,30,33,1,12],[12119,5,6,9,19,32,6,9],
+[12120,2,10,21,23,29,3,4],[12121,7,18,20,29,30,5,6],[12122,23,24,25,29,31,3,12],
+[12123,5,8,18,30,33,1,9],[12124,7,11,19,20,35,5,10],[12125,6,14,17,22,35,1,2],
+[12126,13,14,21,28,29,5,10],[12127,12,13,14,25,35,10,12],[12128,9,10,19,30,31,4,11],
+[12129,1,7,21,28,31,3,9],[12130,14,19,23,29,30,6,7],[12131,2,16,18,27,30,8,12],
+[12132,5,8,21,25,33,1,11],[12133,5,7,13,29,30,1,5],[12134,1,6,18,32,35,2,7],
+[12135,3,5,17,18,33,6,7],[12136,2,23,29,30,31,1,4],[12137,3,12,20,21,27,1,6],
+[12138,13,17,27,31,33,6,12],[12139,9,10,12,22,25,4,11],[12140,7,17,27,28,29,9,10],
+[12141,3,11,19,23,34,2,12],[12142,15,19,29,34,35,7,10],[12143,9,27,29,30,31,3,6],
+[12144,11,13,14,21,29,1,10],[12145,5,22,31,33,35,6,9],[12146,1,10,13,17,26,6,8],
+[12147,2,3,17,19,33,2,9],[12148,4,16,27,29,34,6,11],[12149,2,10,23,33,34,5,10],
+[12150,2,14,18,24,31,2,3],[12151,3,19,20,24,33,3,4],[12152,4,17,26,33,34,2,8],
+[12153,8,9,10,13,22,5,10],[12154,3,26,27,31,32,3,9]
+].map(d => ({
+  period: String(d[0]).padStart(5,'0'),
+  front: d.slice(1,6).sort((a,b)=>a-b),
+  back: d.slice(6,8).sort((a,b)=>a-b),
+  year: 2000 + parseInt(String(d[0]).slice(0,2))
+}));
+
+// ========== 工具函数 ==========
+function getFilteredData(year) {
+  if (year === 'all') return ALL_DATA;
+  return ALL_DATA.filter(d => d.year === year);
+}
+
+function countFreq(data, zone) {
+  const freq = {};
+  const max = zone === 'front' ? 35 : 12;
+  for (let i = 1; i <= max; i++) freq[i] = 0;
+  data.forEach(d => {
+    d[zone].forEach(n => freq[n]++);
+  });
+  return freq;
+}
+
+function getOddEven(nums) {
+  let odd = 0, even = 0;
+  nums.forEach(n => n % 2 === 1 ? odd++ : even++);
+  return {odd, even};
+}
+
+function getBigSmall(nums, threshold) {
+  let big = 0, small = 0;
+  nums.forEach(n => n >= threshold ? big++ : small++);
+  return {big, small};
+}
+
+function getSum(nums) {
+  return nums.reduce((a,b) => a+b, 0);
+}
+
+function getStreaks(nums) {
+  let count = 0, groups = 0;
+  const pairs = [];
+  for (let i = 1; i < nums.length; i++) {
+    if (nums[i] - nums[i-1] === 1) {
+      count++;
+      pairs.push(`${nums[i-1]}-${nums[i]}`);
+      // 检查是否是新的一组连号
+      if (i < 2 || nums[i-1] - nums[i-2] !== 1) groups++;
+    }
+  }
+  return {count, groups, pairs};
+}
+
+function colorScale(val, min, max) {
+  if (max === min) return 'rgba(59,130,246,0.5)';
+  const t = (val - min) / (max - min);
+  if (t < 0.25) return `rgba(59,130,246,${0.3+t*2})`;
+  if (t < 0.5) return `rgba(34,197,94,${0.3+(t-0.25)*2})`;
+  if (t < 0.75) return `rgba(249,115,22,${0.3+(t-0.5)*2})`;
+  return `rgba(239,68,68,${0.3+(t-0.75)*2})`;
+}
+
+// ========== 渲染函数 ==========
+function renderOverview() {
+  const data = ALL_DATA;
+  const totalDraws = data.length;
+  const years = [...new Set(data.map(d => d.year))];
+  const frontFreq = countFreq(data, 'front');
+  const backFreq = countFreq(data, 'back');
+  const frontVals = Object.values(frontFreq);
+  const frontMax = Math.max(...frontVals);
+  const frontMin = Math.min(...frontVals);
+  const frontMaxNum = +Object.keys(frontFreq).find(k => frontFreq[k] === frontMax);
+  const frontMinNum = +Object.keys(frontFreq).find(k => frontFreq[k] === frontMin);
+  const backVals = Object.values(backFreq);
+  const backMax = Math.max(...backVals);
+  const backMin = Math.min(...backVals);
+  const backMaxNum = +Object.keys(backFreq).find(k => backFreq[k] === backMax);
+
+  // 总期数
+  document.getElementById('dataBadge').textContent = `共 ${totalDraws} 期数据 (${years[0]}-${years[years.length-1]})`;
+
+  // 统计卡片
+  document.getElementById('overviewStats').innerHTML = `
+    <div class="stat-item"><div class="value">${totalDraws}</div><div class="label">总开奖期数</div></div>
+    <div class="stat-item"><div class="value">${years.length}</div><div class="label">覆盖年份数</div></div>
+    <div class="stat-item"><div class="value">${frontMaxNum}</div><div class="label">前区最热号码 (${frontMax}次)</div></div>
+    <div class="stat-item"><div class="value">${frontMinNum}</div><div class="label">前区最冷号码 (${frontMin}次)</div></div>
+    <div class="stat-item"><div class="value">${backMaxNum}</div><div class="label">后区最热号码 (${backMax}次)</div></div>
+    <div class="stat-item"><div class="value">${data.length > 0 ? data[data.length-1].period : '-'}</div><div class="label">最新期号</div></div>
+  `;
+
+  // 热力图
+  const hm = document.getElementById('overviewHeatmap');
+  hm.style.gridTemplateColumns = `40px repeat(7, 1fr)`;
+  hm.innerHTML = '';
+  // 前区1-35热力图
+  const hmTitle = document.createElement('div');
+  hmTitle.style.cssText = 'grid-column:1/-1;font-size:12px;color:var(--text2);text-align:center;margin-bottom:4px';
+  hmTitle.textContent = '前区号码 (1-35)';
+  hm.appendChild(hmTitle);
+
+  for (let row = 0; row < 5; row++) {
+    const label = document.createElement('div');
+    label.className = 'heatmap-label';
+    label.textContent = `${row*7+1}-${Math.min(row*7+7,35)}`;
+    hm.appendChild(label);
+    for (let col = 0; col < 7; col++) {
+      const num = row * 7 + col + 1;
+      if (num > 35) {hm.appendChild(document.createElement('div')); continue;}
+      const cell = document.createElement('div');
+      cell.className = 'heatmap-cell';
+      const freq = frontFreq[num] || 0;
+      cell.style.background = colorScale(freq, frontMin, frontMax);
+      cell.style.color = freq > (frontMin + frontMax) / 2 ? '#fff' : '#aaa';
+      cell.innerHTML = `${num}<span class="tip">${num}号: ${freq}次 (${(freq/totalDraws*100).toFixed(1)}%)</span>`;
+      hm.appendChild(cell);
+    }
+  }
+
+  // 后区热力图
+  const hmTitle2 = document.createElement('div');
+  hmTitle2.style.cssText = 'grid-column:1/-1;font-size:12px;color:var(--text2);text-align:center;margin-top:12px;margin-bottom:4px';
+  hmTitle2.textContent = '后区号码 (1-12)';
+  hm.appendChild(hmTitle2);
+
+  const backMax2 = Math.max(...Object.values(backFreq));
+  const backMin2 = Math.min(...Object.values(backFreq));
+  for (let row = 0; row < 2; row++) {
+    const label = document.createElement('div');
+    label.className = 'heatmap-label';
+    label.textContent = row === 0 ? '1-6' : '7-12';
+    hm.appendChild(label);
+    for (let col = 0; col < 6; col++) {
+      const num = row * 6 + col + 1;
+      if (num > 12) {hm.appendChild(document.createElement('div')); continue;}
+      const cell = document.createElement('div');
+      cell.className = 'heatmap-cell';
+      const freq = backFreq[num] || 0;
+      cell.style.background = colorScale(freq, backMin2, backMax2);
+      cell.style.color = freq > (backMin2 + backMax2) / 2 ? '#fff' : '#aaa';
+      cell.innerHTML = `${num}<span class="tip">${num}号: ${freq}次 (${(freq/totalDraws*100).toFixed(1)}%)</span>`;
+      hm.appendChild(cell);
+    }
+  }
+
+  // 年度趋势
+  const yearCounts = {};
+  years.forEach(y => yearCounts[y] = 0);
+  data.forEach(d => yearCounts[d.year]++);
+  const maxCount = Math.max(...Object.values(yearCounts));
+  const yt = document.getElementById('yearTrend');
+  yt.innerHTML = '';
+  years.forEach(y => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    const pct = (yearCounts[y] / maxCount * 100);
+    col.innerHTML = `
+      <div class="bar-val">${yearCounts[y]}</div>
+      <div class="bar" style="height:${pct}%;background:linear-gradient(180deg,var(--accent),var(--accent2))"></div>
+      <div class="bar-label">${y}</div>
+    `;
+    yt.appendChild(col);
+  });
+}
+
+function renderFreq() {
+  const years = [...new Set(ALL_DATA.map(d => d.year))];
+  let selectedYear = 'all';
+
+  function renderYearFilter(containerId, onFilter) {
+    const c = document.getElementById(containerId);
+    c.innerHTML = `<div class="year-btn active" data-year="all">全部</div>` +
+      years.map(y => `<div class="year-btn" data-year="${y}">${y}</div>`).join('');
+    c.querySelectorAll('.year-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        c.querySelectorAll('.year-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        onFilter(btn.dataset.year);
+      });
+    });
+  }
+
+  function renderBarChart(containerId, data, zone) {
+    const freq = countFreq(data, zone);
+    const max = zone === 'front' ? 35 : 12;
+    const vals = Object.values(freq);
+    const maxVal = Math.max(...vals);
+    const minVal = Math.min(...vals);
+    const container = document.getElementById(containerId);
+    container.innerHTML = '';
+    for (let i = 1; i <= max; i++) {
+      const col = document.createElement('div');
+      col.className = 'bar-col';
+      const pct = (freq[i] / maxVal * 100);
+      const isHot = freq[i] > (minVal + maxVal) / 2 + (maxVal - minVal) * 0.25;
+      const isCold = freq[i] < (minVal + maxVal) / 2 - (maxVal - minVal) * 0.25;
+      const barColor = isHot ? 'linear-gradient(180deg,#ef4444,#dc2626)' :
+                        isCold ? 'linear-gradient(180deg,#06b6d4,#0891b2)' :
+                        'linear-gradient(180deg,#3b82f6,#2563eb)';
+      col.innerHTML = `
+        <div class="bar-val" style="color:${isHot?'var(--red)':isCold?'var(--cyan)':'var(--text2)'}">${freq[i]}</div>
+        <div class="bar" style="height:${pct}%;background:${barColor}" title="${i}号: ${freq[i]}次"></div>
+        <div class="bar-label">${i}</div>
+      `;
+      container.appendChild(col);
+    }
+  }
+
+  function update(year) {
+    const filtered = getFilteredData(year);
+    renderBarChart('frontFreqChart', filtered, 'front');
+    renderBarChart('backFreqChart', filtered, 'back');
+
+    // 冷热排行
+    const frontFreq = countFreq(filtered, 'front');
+    const sorted = Object.entries(frontFreq).sort((a,b) => b[1]-a[1]);
+    const hot = sorted.slice(0, 10);
+    const cold = sorted.slice(-10).reverse();
+
+    document.getElementById('hotNumbers').innerHTML = hot.map(([num, cnt], i) =>
+      `<div class="streak-item"><div class="streak-num" style="background:linear-gradient(135deg,#ef4444,#b91c1c);color:#fff;font-size:${parseInt(num)>9?'13px':'14px'}">${num}</div><div class="streak-info"><div class="count">${cnt}次</div><div class="detail">出现频率 ${(cnt/filtered.length*100).toFixed(1)}%</div></div></div>`
+    ).join('');
+
+    document.getElementById('coldNumbers').innerHTML = cold.map(([num, cnt], i) =>
+      `<div class="streak-item"><div class="streak-num" style="background:linear-gradient(135deg,#06b6d4,#0891b2);color:#fff;font-size:${parseInt(num)>9?'13px':'14px'}">${num}</div><div class="streak-info"><div class="count">${cnt}次</div><div class="detail">出现频率 ${(cnt/filtered.length*100).toFixed(1)}%</div></div></div>`
+    ).join('');
+  }
+
+  renderYearFilter('yearFilterFront', update);
+  renderYearFilter('yearFilterBack', update);
+  update('all');
+}
+
+function renderOddEven() {
+  const data = ALL_DATA;
+  // 前区奇偶统计
+  const frontOE = data.map(d => getOddEven(d.front));
+  const frontOETotal = frontOE.reduce((a,b) => ({odd:a.odd+b.odd, even:a.even+b.even}), {odd:0,even:0});
+
+  // 前区奇偶比分布
+  const frontOEDist = {};
+  frontOE.forEach(oe => {
+    const key = `${oe.odd}:${oe.even}`;
+    frontOEDist[key] = (frontOEDist[key] || 0) + 1;
+  });
+
+  // 后区奇偶
+  const backOE = data.map(d => getOddEven(d.back));
+  const backOEDist = {};
+  backOE.forEach(oe => {
+    const key = `${oe.odd}:${oe.even}`;
+    backOEDist[key] = (backOEDist[key] || 0) + 1;
+  });
+
+  // 统计卡片
+  document.getElementById('oddEvenStats').innerHTML = `
+    <div class="stat-item"><div class="value">${frontOETotal.odd}</div><div class="label">前区奇数总次数</div></div>
+    <div class="stat-item"><div class="value">${frontOETotal.even}</div><div class="label">前区偶数总次数</div></div>
+    <div class="stat-item"><div class="value">${(frontOETotal.odd/frontOETotal.even).toFixed(2)}</div><div class="label">前区奇偶比</div></div>
+    <div class="stat-item"><div class="value">${Object.keys(frontOEDist).sort((a,b)=>frontOEDist[b]-frontOEDist[a])[0]}</div><div class="label">前区最常见奇偶比</div></div>
+  `;
+
+  // 前区奇偶比分布图
+  const sortedKeys = Object.keys(frontOEDist).sort((a,b) => {
+    const [ao,ae] = a.split(':').map(Number);
+    const [bo,be] = b.split(':').map(Number);
+    return ao - bo;
+  });
+  const maxDist = Math.max(...Object.values(frontOEDist));
+  document.getElementById('oddEvenDist').innerHTML = sortedKeys.map(key => {
+    const pct = (frontOEDist[key] / maxDist * 100);
+    return `<div class="dist-row"><div class="dist-label">${key}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:linear-gradient(90deg,var(--purple),var(--accent))">${frontOEDist[key]}</div></div><div class="dist-count">${(frontOEDist[key]/data.length*100).toFixed(1)}%</div></div>`;
+  }).join('');
+
+  // 后区奇偶比
+  const backSortedKeys = Object.keys(backOEDist).sort((a,b) => {
+    const [ao,ae] = a.split(':').map(Number);
+    const [bo,be] = b.split(':').map(Number);
+    return ao - bo;
+  });
+  const backMaxDist = Math.max(...Object.values(backOEDist));
+  document.getElementById('backOddEvenDist').innerHTML = backSortedKeys.map(key => {
+    const pct = (backOEDist[key] / backMaxDist * 100);
+    return `<div class="dist-row"><div class="dist-label">${key}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:linear-gradient(90deg,var(--blue),var(--cyan))">${backOEDist[key]}</div></div><div class="dist-count">${(backOEDist[key]/data.length*100).toFixed(1)}%</div></div>`;
+  }).join('');
+
+  // 年度奇偶趋势
+  const years = [...new Set(data.map(d => d.year))];
+  const yearOERatio = {};
+  years.forEach(y => {
+    const yd = data.filter(d => d.year === y);
+    let odd = 0, even = 0;
+    yd.forEach(d => {const oe = getOddEven(d.front); odd += oe.odd; even += oe.even;});
+    yearOERatio[y] = odd / (odd + even);
+  });
+  const oet = document.getElementById('oddEvenTrend');
+  oet.innerHTML = '';
+  years.forEach(y => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    const pct = yearOERatio[y] * 100;
+    const color = pct > 52 ? 'linear-gradient(180deg,#a855f7,#7c3aed)' : pct < 48 ? 'linear-gradient(180deg,#06b6d4,#0891b2)' : 'linear-gradient(180deg,#22c55e,#16a34a)';
+    col.innerHTML = `
+      <div class="bar-val">${(pct).toFixed(1)}%</div>
+      <div class="bar" style="height:${pct}%;background:${color}"></div>
+      <div class="bar-label">${y}</div>
+    `;
+    oet.appendChild(col);
+  });
+}
+
+function renderBigSmall() {
+  const data = ALL_DATA;
+  const frontBS = data.map(d => getBigSmall(d.front, 18));
+  const backBS = data.map(d => getBigSmall(d.back, 7));
+
+  const frontBSTotal = frontBS.reduce((a,b) => ({big:a.big+b.big, small:a.small+b.small}), {big:0,small:0});
+  const backBSTotal = backBS.reduce((a,b) => ({big:a.big+b.big, small:a.small+b.small}), {big:0,small:0});
+
+  // 前区大小比分布
+  const frontBSDist = {};
+  frontBS.forEach(bs => {
+    const key = `${bs.big}:${bs.small}`;
+    frontBSDist[key] = (frontBSDist[key] || 0) + 1;
+  });
+  const backBSDist = {};
+  backBS.forEach(bs => {
+    const key = `${bs.big}:${bs.small}`;
+    backBSDist[key] = (backBSDist[key] || 0) + 1;
+  });
+
+  document.getElementById('bigSmallStats').innerHTML = `
+    <div class="stat-item"><div class="value">${frontBSTotal.big}</div><div class="label">前区大数总次数</div></div>
+    <div class="stat-item"><div class="value">${frontBSTotal.small}</div><div class="label">前区小数总次数</div></div>
+    <div class="stat-item"><div class="value">${(frontBSTotal.big/frontBSTotal.small).toFixed(2)}</div><div class="label">前区大小比</div></div>
+    <div class="stat-item"><div class="value">${Object.keys(frontBSDist).sort((a,b)=>frontBSDist[b]-frontBSDist[a])[0]}</div><div class="label">前区最常见大小比</div></div>
+  `;
+
+  const maxDist = Math.max(...Object.values(frontBSDist));
+  const sortedKeys = Object.keys(frontBSDist).sort((a,b) => {
+    const [ab,as] = a.split(':').map(Number);
+    const [bb,bs] = b.split(':').map(Number);
+    return ab - bb;
+  });
+  document.getElementById('bigSmallDist').innerHTML = sortedKeys.map(key => {
+    const pct = (frontBSDist[key] / maxDist * 100);
+    return `<div class="dist-row"><div class="dist-label">${key}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:linear-gradient(90deg,var(--orange),var(--accent))">${frontBSDist[key]}</div></div><div class="dist-count">${(frontBSDist[key]/data.length*100).toFixed(1)}%</div></div>`;
+  }).join('');
+
+  const backMaxDist = Math.max(...Object.values(backBSDist));
+  const backSortedKeys = Object.keys(backBSDist).sort((a,b) => {
+    const [ab,as] = a.split(':').map(Number);
+    const [bb,bs] = b.split(':').map(Number);
+    return ab - bb;
+  });
+  document.getElementById('backBigSmallDist').innerHTML = backSortedKeys.map(key => {
+    const pct = (backBSDist[key] / backMaxDist * 100);
+    return `<div class="dist-row"><div class="dist-label">${key}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:linear-gradient(90deg,var(--cyan),var(--blue))">${backBSDist[key]}</div></div><div class="dist-count">${(backBSDist[key]/data.length*100).toFixed(1)}%</div></div>`;
+  }).join('');
+}
+
+function renderSum() {
+  const data = ALL_DATA;
+  const frontSums = data.map(d => getSum(d.front));
+  const backSums = data.map(d => getSum(d.back));
+
+  const frontSumMin = Math.min(...frontSums);
+  const frontSumMax = Math.max(...frontSums);
+  const frontSumAvg = (frontSums.reduce((a,b)=>a+b,0) / frontSums.length).toFixed(1);
+  const backSumAvg = (backSums.reduce((a,b)=>a+b,0) / backSums.length).toFixed(1);
+
+  document.getElementById('sumStats').innerHTML = `
+    <div class="stat-item"><div class="value">${frontSumAvg}</div><div class="label">前区平均和值</div></div>
+    <div class="stat-item"><div class="value">${frontSumMin}</div><div class="label">前区最小和值</div></div>
+    <div class="stat-item"><div class="value">${frontSumMax}</div><div class="label">前区最大和值</div></div>
+    <div class="stat-item"><div class="value">${backSumAvg}</div><div class="label">后区平均和值</div></div>
+  `;
+
+  // 前区和值分布 (分组，每10个一组)
+  const frontSumDist = {};
+  const binSize = 10;
+  frontSums.forEach(s => {
+    const bin = Math.floor(s / binSize) * binSize;
+    const key = `${bin}-${bin+binSize-1}`;
+    frontSumDist[key] = (frontSumDist[key] || 0) + 1;
+  });
+  const frontSumKeys = Object.keys(frontSumDist).sort((a,b) => parseInt(a) - parseInt(b));
+  const frontSumMaxDist = Math.max(...Object.values(frontSumDist));
+  const sc = document.getElementById('sumDistChart');
+  sc.innerHTML = '';
+  frontSumKeys.forEach(key => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    const pct = frontSumDist[key] / frontSumMaxDist * 100;
+    col.innerHTML = `
+      <div class="bar-val">${frontSumDist[key]}</div>
+      <div class="bar" style="height:${pct}%;background:linear-gradient(180deg,var(--accent),var(--accent2))"></div>
+      <div class="bar-label">${key}</div>
+    `;
+    sc.appendChild(col);
+  });
+
+  // 后区和值分布
+  const backSumDist = {};
+  backSums.forEach(s => {backSumDist[s] = (backSumDist[s] || 0) + 1;});
+  const backSumKeys = Object.keys(backSumDist).sort((a,b) => +a - +b);
+  const backSumMaxDist = Math.max(...Object.values(backSumDist));
+  const bsc = document.getElementById('backSumDistChart');
+  bsc.innerHTML = '';
+  backSumKeys.forEach(key => {
+    const col = document.createElement('div');
+    col.className = 'bar-col';
+    const pct = backSumDist[key] / backSumMaxDist * 100;
+    col.innerHTML = `
+      <div class="bar-val">${backSumDist[key]}</div>
+      <div class="bar" style="height:${pct}%;background:linear-gradient(180deg,var(--blue),var(--cyan))"></div>
+      <div class="bar-label">${key}</div>
+    `;
+    bsc.appendChild(col);
+  });
+}
+
+function renderStreak() {
+  const data = ALL_DATA;
+  const streakInfo = data.map(d => getStreaks(d.front));
+  const totalWithStreak = streakInfo.filter(s => s.count > 0).length;
+  const totalNoStreak = data.length - totalWithStreak;
+
+  // 连号次数分布
+  const streakCountDist = {};
+  streakInfo.forEach(s => {
+    const key = s.count;
+    streakCountDist[key] = (streakCountDist[key] || 0) + 1;
+  });
+
+  // 连号组数分布
+  const streakGroupDist = {};
+  streakInfo.forEach(s => {
+    const key = s.groups;
+    streakGroupDist[key] = (streakGroupDist[key] || 0) + 1;
+  });
+
+  // 常见连号组合
+  const pairFreq = {};
+  streakInfo.forEach((s, i) => {
+    s.pairs.forEach(p => {pairFreq[p] = (pairFreq[p] || 0) + 1;});
+  });
+
+  document.getElementById('streakStats').innerHTML = `
+    <div class="stat-item"><div class="value">${(totalWithStreak/data.length*100).toFixed(1)}%</div><div class="label">含连号期数占比</div></div>
+    <div class="stat-item"><div class="value">${totalWithStreak}</div><div class="label">含连号期数</div></div>
+    <div class="stat-item"><div class="value">${totalNoStreak}</div><div class="label">无连号期数</div></div>
+    <div class="stat-item"><div class="value">${Object.keys(pairFreq).length}</div><div class="label">不同连号组合数</div></div>
+  `;
+
+  const maxDist = Math.max(...Object.values(streakCountDist));
+  const sortedKeys = Object.keys(streakCountDist).sort((a,b) => +a - +b);
+  document.getElementById('streakDist').innerHTML = sortedKeys.map(key => {
+    const label = key === '0' ? '无连号' : `${key}个连号`;
+    const pct = streakCountDist[key] / maxDist * 100;
+    return `<div class="dist-row"><div class="dist-label">${label}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:linear-gradient(90deg,var(--green),var(--accent))">${streakCountDist[key]}</div></div><div class="dist-count">${(streakCountDist[key]/data.length*100).toFixed(1)}%</div></div>`;
+  }).join('');
+
+  const maxGroupDist = Math.max(...Object.values(streakGroupDist));
+  const groupKeys = Object.keys(streakGroupDist).sort((a,b) => +a - +b);
+  document.getElementById('streakGroupDist').innerHTML = groupKeys.map(key => {
+    const label = key === '0' ? '0组' : `${key}组`;
+    const pct = streakGroupDist[key] / maxGroupDist * 100;
+    return `<div class="dist-row"><div class="dist-label">${label}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${pct}%;background:linear-gradient(90deg,var(--accent2),var(--purple))">${streakGroupDist[key]}</div></div><div class="dist-count">${(streakGroupDist[key]/data.length*100).toFixed(1)}%</div></div>`;
+  }).join('');
+
+  // TOP15连号
+  const topPairs = Object.entries(pairFreq).sort((a,b) => b[1]-a[1]).slice(0,15);
+  document.getElementById('streakPairs').innerHTML = topPairs.map(([pair, cnt]) =>
+    `<div class="streak-item"><div class="streak-num" style="background:linear-gradient(135deg,var(--purple),#7c3aed);color:#fff;font-size:11px">${pair}</div><div class="streak-info"><div class="count">${cnt}次</div><div class="detail">出现频率 ${(cnt/data.length*100).toFixed(2)}%</div></div></div>`
+  ).join('');
+}
+
+function renderZone() {
+  const data = ALL_DATA;
+
+  // 三区间
+  const zone3 = [0, 0, 0]; // 1-12, 13-24, 25-35
+  data.forEach(d => {
+    d.front.forEach(n => {
+      if (n <= 12) zone3[0]++;
+      else if (n <= 24) zone3[1]++;
+      else zone3[2]++;
+    });
+  });
+  const z3max = Math.max(...zone3);
+  document.getElementById('zone3Dist').innerHTML = [
+    {label:'1-12', count:zone3[0], color:'var(--red)'},
+    {label:'13-24', count:zone3[1], color:'var(--accent)'},
+    {label:'25-35', count:zone3[2], color:'var(--blue)'}
+  ].map(z => `<div class="dist-row"><div class="dist-label">${z.label}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${z.count/z3max*100}%;background:${z.color}">${z.count}</div></div><div class="dist-count">${(z.count/(data.length*5)*100).toFixed(1)}%</div></div>`).join('');
+
+  // 五区间
+  const zone5 = [0,0,0,0,0]; // 1-7, 8-14, 15-21, 22-28, 29-35
+  data.forEach(d => {
+    d.front.forEach(n => {
+      if (n <= 7) zone5[0]++;
+      else if (n <= 14) zone5[1]++;
+      else if (n <= 21) zone5[2]++;
+      else if (n <= 28) zone5[3]++;
+      else zone5[4]++;
+    });
+  });
+  const z5max = Math.max(...zone5);
+  document.getElementById('zone5Dist').innerHTML = [
+    {label:'1-7', count:zone5[0], color:'var(--red)'},
+    {label:'8-14', count:zone5[1], color:'var(--orange)'},
+    {label:'15-21', count:zone5[2], color:'var(--accent)'},
+    {label:'22-28', count:zone5[3], color:'var(--green)'},
+    {label:'29-35', count:zone5[4], color:'var(--blue)'}
+  ].map(z => `<div class="dist-row"><div class="dist-label">${z.label}</div><div class="dist-bar-wrap"><div class="dist-bar" style="width:${z.count/z5max*100}%;background:${z.color}">${z.count}</div></div><div class="dist-count">${(z.count/(data.length*5)*100).toFixed(1)}%</div></div>`).join('');
+
+  // 后区号码网格
+  const backFreq = countFreq(data, 'back');
+  const bMax = Math.max(...Object.values(backFreq));
+  const bMin = Math.min(...Object.values(backFreq));
+  document.getElementById('backZoneGrid').innerHTML = Array.from({length:12}, (_,i) => {
+    const n = i+1;
+    const f = backFreq[n] || 0;
+    const intensity = (f - bMin) / (bMax - bMin);
+    const bg = intensity > 0.7 ? 'linear-gradient(135deg,#3b82f6,#1d4ed8)' :
+               intensity > 0.4 ? 'linear-gradient(135deg,#60a5fa,#3b82f6)' :
+               'linear-gradient(135deg,#1e3a5f,#1e40af)';
+    return `<div class="zone-ball" style="background:${bg};color:#fff"><span>${n}</span><span class="freq">${f}次</span></div>`;
+  }).join('');
+}
+
+function renderHistory() {
+  const years = [...new Set(ALL_DATA.map(d => d.year))].sort((a,b)=>b-a);
+  let selectedYear = years[0];
+
+  const c = document.getElementById('historyYearFilter');
+  c.innerHTML = years.map(y => `<div class="year-btn ${y===selectedYear?'active':''}" data-year="${y}">${y}</div>`).join('');
+  c.querySelectorAll('.year-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      c.querySelectorAll('.year-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedYear = +btn.dataset.year;
+      updateTable();
+    });
+  });
+
+  function updateTable() {
+    const filtered = ALL_DATA.filter(d => d.year === selectedYear).reverse();
+    const tbody = document.getElementById('historyBody');
+    tbody.innerHTML = filtered.map(d => {
+      const oe = getOddEven(d.front);
+      const bs = getBigSmall(d.front, 18);
+      const sum = getSum(d.front);
+      return `<tr>
+        <td>${d.period}</td>
+        <td>${d.front.map(n => `<span class="num-red">${String(n).padStart(2,'0')}</span>`).join(' ')}</td>
+        <td>${d.back.map(n => `<span class="num-blue">${String(n).padStart(2,'0')}</span>`).join(' ')}</td>
+        <td>${sum}</td>
+        <td>${oe.odd}:${oe.even}</td>
+        <td>${bs.big}:${bs.small}</td>
+      </tr>`;
+    }).join('');
+  }
+  updateTable();
+}
+
+// ========== Tab切换 ==========
+document.getElementById('tabBar').addEventListener('click', e => {
+  const tab = e.target.closest('.tab');
+  if (!tab) return;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  tab.classList.add('active');
+  document.getElementById(`panel-${tab.dataset.panel}`).classList.add('active');
+});
+
+// ========== 主入口 ==========
+async function main() {
+  try {
+    // 1. 先使用内嵌数据(2007-2012年，约780期)
+    ALL_DATA = FALLBACK_DATA.slice();
+    DATA_LOADED = true;
+
+    document.getElementById('loadingProgress').textContent = `已加载内嵌数据 ${ALL_DATA.length} 期，渲染中...`;
+
+    // 2. 立即渲染基础分析
+    setTimeout(() => {
+      document.getElementById('loadingOverlay').classList.add('hide');
+      renderAll();
+    }, 300);
+
+    // 3. 后台尝试获取2013-2026年补充数据
+    try {
+      const extraData = await fetchExtraData();
+      if (extraData.length > 0) {
+        // 合并去重
+        const seen = new Set(ALL_DATA.map(d => d.period));
+        const newDraws = extraData.filter(d => !seen.has(d.period));
+        ALL_DATA = [...ALL_DATA, ...newDraws].sort((a,b) => a.period.localeCompare(b.period));
+
+        // 缓存到localStorage
+        try {
+          localStorage.setItem('dlt_data_cache', JSON.stringify(ALL_DATA));
+          localStorage.setItem('dlt_cache_time', Date.now().toString());
+        } catch(e) {}
+
+        // 重新渲染
+        renderAll();
+        document.getElementById('dataBadge').textContent = `共 ${ALL_DATA.length} 期数据 (${[...new Set(ALL_DATA.map(d=>d.year))].sort()[0]}-${[...new Set(ALL_DATA.map(d=>d.year))].sort().pop()})`;
+      }
+    } catch(e) {
+      console.warn('补充数据获取失败，使用内嵌数据:', e);
+    }
+
+    // 4. 尝试从localStorage加载缓存
+    if (ALL_DATA.length < 1000) {
+      try {
+        const cached = localStorage.getItem('dlt_data_cache');
+        const cacheTime = localStorage.getItem('dlt_cache_time');
+        if (cached && cacheTime) {
+          const age = Date.now() - parseInt(cacheTime);
+          // 缓存7天内有效
+          if (age < 7 * 24 * 3600 * 1000) {
+            const cachedData = JSON.parse(cached);
+            if (cachedData.length > ALL_DATA.length) {
+              ALL_DATA = cachedData;
+              renderAll();
+              document.getElementById('dataBadge').textContent = `共 ${ALL_DATA.length} 期数据 (缓存)`;
+            }
+          }
+        }
+      } catch(e) {}
+    }
+
+  } catch(e) {
+    console.error('加载失败:', e);
+    ALL_DATA = FALLBACK_DATA;
+    document.getElementById('loadingOverlay').classList.add('hide');
+    renderAll();
+  }
+}
+
+function renderAll() {
+  renderOverview();
+  renderFreq();
+  renderOddEven();
+  renderBigSmall();
+  renderSum();
+  renderStreak();
+  renderZone();
+  renderHistory();
+}
+
+main();
+</script>
+</body>
+</html>
